@@ -1,0 +1,441 @@
+import tkinter as tk
+import string #Pour qu’une chaîne stocke l’alphabet
+import os, sys #Aide à l’importation d’images
+from PIL import Image, ImageTk #aide à l’implémentation d’images dans l’interface graphique
+from PIL.ImageTk import PhotoImage
+
+class Board(tk.Frame):
+
+    def __init__(self, parent, length, width): 
+        
+        tk.Frame.__init__(self, parent)
+        self.parent = parent
+        self.length = length
+        self.width = width
+        self.config(height=100*self.length, width=100*self.width)
+        self.pack()
+        
+        self.couleur_carrés = None
+        self.carrés = {} 
+        self.rangs = string.ascii_lowercase
+        self.blanches_images = {} 
+        self.noir_images = {} 
+        self.blanches_pieces = ["fou_b", "roi_b", "cheval_b", "pion_b", "reine", "tour_b"] 
+        self.noir_pieces = ["fou_n", "roi_n", "cheval_n", "pion_n", "reine_n", "tour_n"] 
+        self.bouton_pressé = 0 
+        self.coup = 0 
+        self.car1 = None 
+        self.car2 = None 
+        self.car1_bouton = None 
+        self.car2_bouton = None
+        self.piece_coleur = None 
+        self.wk_joué = False 
+        self.bk_joué = False 
+        self.wr1_joué = False 
+        self.wr2_joué = False
+        self.br1_joué = False 
+        self.br2_joué = False 
+        self.castled = False 
+        self.set_carrés()
+
+    def piece_selectioné(self, bouton): 
+        if bouton["image"] in self.blanches_pieces and self.bouton_pressé == 0: 
+            self.piece_coleur = "blanches" 
+        elif bouton["image"] in self.noir_pieces and self.bouton_pressé == 0: 
+            self.piece_coleur = "noir"      
+        
+        if (self.piece_coleur == "blanches" and self.coup % 2 == 0) or (self.piece_coleur == "noir" and self.coup % 2 == 1) or self.bouton_pressé == 1: 
+            if self.bouton_pressé == 0: 
+                self.car1 = list(self.carrés.keys())[list(self.carrés.values()).index(bouton)] 
+                self.car1_bouton = bouton
+                self.bouton_pressé += 1 
+             
+            elif self.bouton_pressé==1: 
+                self.car2 = list(self.carrés.keys())[list(self.carrés.values()).index(bouton)]
+                self.car2_bouton = bouton
+                if self.car2 == self.car1: 
+                    self.bouton_pressé = 0
+                    return
+                
+                if self.allowed_piece_move() and self.friendly_fire() == False:
+                    prev_car1 = self.car1
+                    prev_car1_bouton_piece = self.car1_bouton["image"]
+                    prev_car2 = self.car2
+                    prev_car2_bouton_piece = self.car2_bouton["image"]
+                    self.carrés[self.car2].config(image=self.car1_bouton["image"]) 
+                    self.carrés[self.car2].image = self.car1_bouton["image"]
+                    self.carrés[self.car1].config(image=self.blanches_images["blank.png"])
+                    self.carrés[self.car1].image = self.blanches_images["blank.png"]
+                    if  self.in_check() == True and self.castled == False: 
+                        self.carrés[prev_car2].config(image=prev_car2_bouton_piece) 
+                        self.carrés[prev_car2].image = prev_car2_bouton_piece
+                        self.carrés[prev_car1].config(image=prev_car1_bouton_piece)
+                        self.carrés[prev_car1].image = prev_car1_bouton_piece
+                        self.bouton_pressé = 0
+                        return
+                    else: 
+                        if prev_car1_bouton_piece == "roi_b":
+                            self.wk_joué = True
+                        if prev_car1_bouton_piece == "roi_n":
+                            self.bk_joué = True
+                        if prev_car1_bouton_piece == "tour_b" and prev_car1 == "a1":
+                            self.wr1_joué = True
+                        if prev_car1_bouton_piece == "tour_b" and prev_car1 == "h1":
+                            self.wr2_joué = True
+                        if prev_car1_bouton_piece == "tour_n" and prev_car1 == "a8":
+                            self.br1_joué = True
+                        if prev_car1_bouton_piece == "tour_n" and prev_car1 == "h8":
+                            self.br2_joué = True
+                        self.bouton_pressé = 0
+                        self.coup += 1                     
+                        if (bouton["image"] == "pion_b" and prev_car2.count("8")==1) or (bouton["image"] == "pion_n" 
+                                                                                           and prev_car2.count("1")==1): 
+                            self.promotion_menu(self.piece_coleur)
+                        self.castled = False
+        else:
+            self.bouton_pressé = 0
+            return
+
+    def promotion_menu(self, coleur): 
+        def return_piece(piece): 
+            self.carrés[self.car2].config(image=piece)
+            self.carrés[self.car2].image = piece
+            promo.destroy()
+            return
+        
+        promo = tk.Tk() 
+        promo.title("Choose what to promote your pawn to")
+        if coleur=="blanches":
+            promo_cheval = tk.bouton(promo, text="cheval", command=lambda: return_piece("cheval_b"))
+            promo_cheval.grid(row=0, column=0)
+            promo_fou = tk.bouton(promo, text="fou", command=lambda: return_piece("fou_b"))
+            promo_fou.grid(row=0, column=1)
+            promo_tour = tk.bouton(promo, text="tour", command=lambda: return_piece("tour_b"))
+            promo_tour.grid(row=1, column=0)
+            promo_reine = tk.bouton(promo, text="reine", command=lambda: return_piece("reine"))
+            promo_reine.grid(row=1, column=1)
+        elif coleur=="noir":
+            promo_cheval = tk.bouton(promo, text="cheval", command=lambda: return_piece("cheval_n"))
+            promo_cheval.grid(row=0, column=0)
+            promo_fou = tk.bouton(promo, text="fou", command=lambda: return_piece("fou_n"))
+            promo_fou.grid(row=0, column=1)
+            promo_tour = tk.bouton(promo, text="tour", command=lambda: return_piece("tour_n"))
+            promo_tour.grid(row=1, column=0)
+            promo_reine = tk.bouton(promo, text="reine", command=lambda: return_piece("reine_n"))
+            promo_reine.grid(row=1, column=1)
+        promo.mainloop()
+        return
+            
+    def friendly_fire(self): 
+        piece_2_coleur = self.car2_bouton["image"]
+        if self.piece_coleur == "blanches" and piece_2_coleur in self.blanches_pieces:
+            return True
+        if self.piece_coleur == "noir" and piece_2_coleur in self.noir_pieces:
+            return True
+        else:
+            return False
+        
+    def clear_path(self, piece): 
+        if piece == "tour" or piece == "reine":   
+            if self.car1[0] == self.car2[0]: 
+                pos1 = min(int(self.car1[1]), int(self.car2[1]))
+                pos2 = max(int(self.car1[1]), int(self.car2[1]))
+                for i in range(pos1+1, pos2):
+                    square_on_path = self.carrés[self.car1[0]+str(i)].cget("image")
+                    if square_on_path != "roi_b":
+                        return False
+                    
+            elif self.car1[1] == self.car2[1]: 
+                pos1 = min(self.rangs.find(self.car1[0]), self.rangs.find(self.car2[0]))
+                pos2 = max(self.rangs.find(self.car1[0]), self.rangs.find(self.car2[0]))
+
+                for i in range(pos1+1, pos2):
+                    square_on_path = self.carrés[self.rangs[i]+self.car1[1]].cget("image")
+                    if square_on_path != "roi_b":
+                        return False
+                    
+        if piece == "fou" or piece == "reine": 
+            x1 = self.rangs.find(self.car1[0])
+            x2 = self.rangs.find(self.car2[0])
+            y1 = int(self.car1[1])
+            y2 = int(self.car2[1])
+            
+            if  y1<y2:
+                if x1<x2: 
+                    for x in range(x1+1, x2):
+                        y1 += 1
+                        square_on_path = self.carrés[self.rangs[x]+str(y1)].cget("image")
+                        if square_on_path != "roi_b":
+                            return False
+                elif x1>x2: 
+                    for x in range(x1-1, x2, -1):
+                        y1 += 1
+                        square_on_path = self.carrés[self.rangs[x]+str(y1)].cget("image")
+                        if square_on_path != "roi_b":
+                            return False
+            elif y1>y2:
+                if x1<x2: 
+                    for x in range(x1+1, x2):
+                        y1 -= 1
+                        square_on_path = self.carrés[self.rangs[x]+str(y1)].cget("image")
+                        if square_on_path != "roi_b":
+                            return False
+                if x1>x2: 
+                    for x in range(x1-1, x2, -1):
+                        y1 -= 1
+                        square_on_path = self.carrés[self.rangs[x]+str(y1)].cget("image")
+                        if square_on_path != "roi_b":
+                            return False
+        return True
+                
+        
+    def allowed_piece_move(self):
+        wb, wk, wn, wp, wq, wr = "fou_b", "roi_b", "cheval_b", "pion_b", "reine", "tour_b" 
+        bb, bk, bn, bp, bq, br = "fou_n", "roi_n", "cheval_n", "pion_n", "reine_n", "tour_n"
+
+        if self.car1_bouton["image"] == "roi_b" or self.car1_bouton["image"] == "pyimage9":
+            return False
+        
+        if (self.car1_bouton["image"] == wb or self.car1_bouton["image"] == bb) and self.clear_path("fou"):         
+            if abs(int(self.car1[1]) - int(self.car2[1])) == abs(self.rangs.find(self.car1[0]) - self.rangs.find(self.car2[0])): 
+                return True
+
+        if self.car1_bouton["image"] == wn or self.car1_bouton["image"] == bn: 
+            if (abs(int(self.car1[1]) - int(self.car2[1])) == 2) and (abs(self.rangs.find(self.car1[0]) - self.rangs.find(self.car2[0])) == 1): 
+                return True
+            if (abs(int(self.car1[1]) - int(self.car2[1])) == 1) and (abs(self.rangs.find(self.car1[0]) - self.rangs.find(self.car2[0])) == 2):
+                return True
+        
+        if self.car1_bouton["image"] == wk or self.car1_bouton["image"] == bk: 
+            if (abs(int(self.car1[1]) - int(self.car2[1])) < 2) and (abs(self.rangs.find(self.car1[0]) - self.rangs.find(self.car2[0]))) < 2: 
+                return True
+            if self.castle() is True:
+                return True
+        
+        if self.car1_bouton["image"] == wp: 
+            if "2" in self.car1: 
+                if (int(self.car1[1])+1 == int(self.car2[1]) or int(self.car1[1])+2 == int(self.car2[1])) and self.car1[0] == self.car2[0] and self.car2_bouton["image"] == "roi_b": 
+                    in_front = self.carrés[self.car1[0] + str(int(self.car1[1])+1)]
+                    if in_front["image"] == "roi_b": 
+                        return True
+            if int(self.car1[1])+1 == int(self.car2[1]) and self.car1[0] == self.car2[0] and self.car2_bouton["image"] == "roi_b": 
+                    return True
+            if int(self.car1[1])+1 == int(self.car2[1]) and (abs(self.rangs.find(self.car1[0]) - self.rangs.find(self.car2[0]))) == 1 and self.car2_bouton["image"] != "roi_b": 
+                    return True
+
+                
+        if self.car1_bouton["image"] == bp: 
+            if "7" in self.car1: 
+                if (int(self.car1[1]) == int(self.car2[1])+1 or int(self.car1[1]) == int(self.car2[1])+2) and self.car1[0] == self.car2[0] and self.car2_bouton["image"] == "roi_b": 
+                    return True
+            if int(self.car1[1]) == int(self.car2[1])+1 and self.car1[0] == self.car2[0] and self.car2_bouton["image"] == "roi_b":
+                    return True
+            if int(self.car1[1]) == int(self.car2[1])+1 and abs(self.rangs.find(self.car1[0]) - self.rangs.find(self.car2[0])) == 1 and self.car2_bouton["image"] != "roi_b": 
+                    return True
+
+        if (self.car1_bouton["image"] == wq or self.car1_bouton["image"] == bq) and self.clear_path("reine"):
+            if int(self.car1[1]) == int(self.car2[1]) or self.car1[0] == self.car2[0]: 
+                return True
+            if abs(int(self.car1[1]) - int(self.car2[1])) == abs(self.rangs.find(self.car1[0]) - self.rangs.find(self.car2[0])):
+                return True
+        
+        if self.car1_bouton["image"] == wr or self.car1_bouton["image"] == br: 
+            if (int(self.car1[1]) == int(self.car2[1]) or self.car1[0] == self.car2[0]) and self.clear_path("tour"): 
+                return True  
+        return False
+    
+    def castle(self): 
+        if self.wk_joué == False: 
+            if self.wr1_joué == False and self.car2 == "c1": 
+                for x in range(1,4): 
+                    square_bouton = self.carrés[self.rangs[x]+str(1)]
+                    if square_bouton["image"] != "roi_b":
+                        return False
+                    self.carrés["a1"].config(image="roi_b")
+                    self.carrés["a1"].image = "roi_b"
+                    self.carrés["d1"].config(image="tour_b")
+                    self.carrés["d1"].image = ("tour_b")
+                    self.castled = True
+                    return True
+            if self.wr2_joué == False and self.car2 == "g1":
+                for x in range(5,7):
+                    square_bouton = self.carrés[self.rangs[x]+str(1)]
+                    if square_bouton["image"] != "roi_b":
+                        return False
+                    self.carrés["h1"].config(image="roi_b")
+                    self.carrés["h1"].image = "roi_b"
+                    self.carrés["f1"].config(image="tour_b")
+                    self.carrés["f1"].image = ("tour_b")
+                    self.castled = True
+                    return True
+        if self.bk_joué == False:
+            if self.br1_joué == False and self.car2 == "c8":
+                for x in range(1,3): 
+                    square_bouton = self.carrés[self.rangs[x]+str(8)]
+                    if square_bouton["image"] != "roi_b":
+                        return False
+                    self.carrés["a8"].config(image="roi_b")
+                    self.carrés["a8"].image = "roi_b"
+                    self.carrés["d8"].config(image="tour_n")
+                    self.carrés["d8"].image = ("tour_n")
+                    self.castled = True
+                    return True
+            if self.br2_joué == False and self.car2 == "g8":
+                for x in range(5,7): 
+                    square_bouton = self.carrés[self.rangs[x]+str(8)]
+                    if square_bouton["image"] != "roi_b":
+                        return False
+                    self.carrés["h8"].config(image="roi_b")
+                    self.carrés["h8"].image = "roi_b"
+                    self.carrés["f8"].config(image="tour_n")
+                    self.carrés["f8"].image = ("tour_n")
+                    self.castled = True
+                    return True
+        else:
+            return False
+   
+        self.bk_joué = False
+        self.wr1_joué = False
+        self.wr2_joué = False
+        self.br1_joué = False
+        self.br2_joué = False
+
+    def in_check(self):
+        previous_car1 = self.car1 
+        previous_car1_bouton = self.car1_bouton
+        previous_car2 = self.car2
+        previous_car2_bouton = self.car2_bouton
+        
+        def return_previous_values():
+            self.car1 = previous_car1
+            self.car1_bouton = previous_car1_bouton
+            self.car2 = previous_car2
+            self.car2_bouton = previous_car2_bouton
+            
+        if self.piece_coleur == "blanches":
+            self.car2 = self.find_king("roi_b") 
+            for key in self.carrés: 
+                self.car1 = key
+                self.car1_bouton = self.carrés[self.car1]
+                if self.car1_bouton["image"] in self.noir_pieces:
+        if self.piece_coleur == "noir":
+            self.car2 = self.find_king("roi_n")
+            for key in self.carrés:
+                self.car1 = key
+                self.car1_bouton = self.carrés[self.car1] 
+                if self.car1_bouton["image"] in self.blanches_pieces:
+                    if self.allowed_piece_move():
+                        return True
+        return_previous_values()
+        return False
+    
+    find_king(self, king):
+        for square  in self.carrés:
+            bouton = self.carrés[square]
+            if bouton["image"] == king:
+                return square
+    
+    def set_carrés(self): 
+
+        for x in range(8):
+            for y in range(8):
+                if x%2==0 and y%2==0: 
+                    self.couleur_carrés="tan4" 
+                elif x%2==1 and y%2==1:
+                    self.couleur_carrés="tan4"
+                else:
+                    self.couleur_carrés="burlywood1"
+                    
+                B = tk.bouton(self, bg=self.couleur_carrés, activebackground="lawn green")
+                B.grid(row=8-x, column=y)
+                pos = self.rangs[y]+str(x+1)
+                self.carrés.setdefault(pos, B) 
+                self.carrés[pos].config(command= lambda key=self.carrés[pos]: self.piece_selectioné(key))               
+        
+    def import_pieces(self): 
+        path = os.path.join(os.path.dirname(__file__), "blanches")
+        w_dirs = os.listdir(path)
+        for file in w_dirs:
+            img = Image.open(path+"\\"+file)
+            img = img.resize((80,80), Image.ANTIALIAS)
+            img = ImageTk.PhotoImage(image=img)
+            self.blanches_images.setdefault(file, img)
+
+        path = os.path.join(os.path.dirname(__file__), "noir")
+        b_dirs = os.listdir(path)
+        for file in b_dirs:
+            img = Image.open(path+"\\"+file)
+            img = img.resize((80,80), Image.ANTIALIAS)
+            img = ImageTk.PhotoImage(image=img)
+            self.noir_images.setdefault(file, img)
+
+    def set_pieces(self):
+        dict_rank1_pieces = {"a1":"r.png", "b1":"n.png", "c1":"b.png", "d1":"q.png", "e1":"k.png", "f1":"b.png", "g1":"n.png", "h1":"r.png"} 
+        dict_rank2_pieces = {"a2":"p.png", "b2":"p.png", "c2":"p.png", "d2":"p.png", "e2":"p.png", "f2":"p.png", "g2":"p.png", "h2":"p.png"}     
+        dict_rank7_pieces = {"a7":"p.png", "b7":"p.png", "c7":"p.png", "d7":"p.png", "e7":"p.png", "f7":"p.png", "g7":"p.png", "h7":"p.png"}
+        dict_rank8_pieces = {"a8":"r.png", "b8":"n.png", "c8":"b.png", "d8":"q.png", "e8":"k.png", "f8":"b.png", "g8":"n.png", "h8":"r.png"}
+
+        for key in dict_rank1_pieces:
+            starting_piece = dict_rank1_pieces[key]
+            self.carrés[key].config(image=self.blanches_images[starting_piece])
+            self.carrés[key].image = self.blanches_images[starting_piece]
+            
+        for key in dict_rank2_pieces:
+            starting_piece = dict_rank2_pieces[key]
+            self.carrés[key].config(image=self.blanches_images[starting_piece])
+            self.carrés[key].image = self.blanches_images[starting_piece]
+            
+        for key in dict_rank7_pieces:
+            starting_piece = dict_rank7_pieces[key]
+            self.carrés[key].config(image=self.noir_images[starting_piece])
+            self.carrés[key].image = self.noir_images[starting_piece]
+            
+        for key in dict_rank8_pieces:
+            starting_piece = dict_rank8_pieces[key]
+            self.carrés[key].config(image=self.noir_images[starting_piece])
+            self.carrés[key].image = self.noir_images[starting_piece]
+
+        for rank in range(3,7): 
+            for file in range(8):
+                starting_piece = "blank.png"
+                pos = self.rangs[file]+str(rank)
+                self.carrés[pos].config(image=self.blanches_images[starting_piece])
+                self.carrés[pos].image = self.blanches_images[starting_piece]
+
+root = tk.Tk() 
+root.geometry("800x800")
+board = Board(root, 8, 8)
+board.import_pieces()
+board.set_pieces()
+board.mainloop()
+
+
+
+
+#programme de sauv.
+import time
+temps = time.strftime("%Y%m%d-%H%M%S")
+filename = f"partie_{temps}.txt"
+pieces=[self.wk_moved,self.bk_moved,self.wr1_moved,self.wr2_moved,self.br1_moved,self.br2_moved,self.wb1_moved,self.wb2_moved,self.wn1_moved,self.wn2_moved,self.bb1_moved,self.bb2_moved,self.bn1_moved,self.bn2_moved,self.wq_moved,self.bq_moved,self.castled]    
+for i in range(17):
+    a = None
+    if pieces[i] == True:
+        if i == 1 or i == 2:
+            a=print(f"K,{self.sq2}")
+        elif i == 3 or i == 4 or i == 5 or i == 6:
+                a=print(f"R,{self.sq2}")        
+        elif i == 7 or i == 8 or i == 9 or i== 10:
+                a=print(f"B,{self.sq2}")
+        elif i == 11 or i == 12 or i == 13 or i == 14:
+                a=print(f"N,{self.sq2}")
+        elif i == 15 or i == 16:
+                a=print(f"Q,{self.sq2}")
+        elif i == 17:
+                a=print(f"O-O-O")
+        else:
+                a=print({self.sq2})
+        with open(filename, 'w') as file:
+                if self.turns % 2 == 1:
+                    file.write(f"{(self.turns + 1)/2}. {a}\n")
+                else:   
+                    file.write(f" {a}")
